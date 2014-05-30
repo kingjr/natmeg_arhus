@@ -1,0 +1,125 @@
+function [handles p compares stats] = bareb(x,cfg)
+% handles = bareb(x,cfg)
+% plot bar diagram and compute all statistical comparisons
+% input     x: cell array in which all data point is contained
+% output    handles, p values and comparison vector
+% (c) JeanRémi King 2012
+if nargin == 1, cfg = []; end
+
+if ~isfield(cfg,'stats'),       cfg.stats       = 'mwwtest';    end
+if ~isfield(cfg,'colormap'),    cfg.colormap    = 'gray';       end
+if ~isfield(cfg,'eb'),          cfg.eb          = 'sem';        end
+if ~isfield(cfg,'facecolor'),   cfg.facecolor   = 'w';          end
+if ~isfield(cfg,'sigcolor'),    cfg.sigcolor    = 'k';          end
+if ~isfield(cfg,'sigwidth'),    cfg.sigwidth    = 1;            end
+if ~isfield(cfg,'sigspread'),   cfg.sigspread   = 10;           end
+if ~isfield(cfg,'maxsig'),      cfg.maxsig      = 5;            end
+if ~isfield(cfg,'fontsize'),    cfg.fontsize    = 15;           end
+if ~isfield(cfg,'bkgcolor'),    cfg.bkgcolor    = [1 1 1];      end
+if ~isfield(cfg,'bar'),         cfg.bar         = false;        end
+if ~isfield(cfg,'eb'),          cfg.eb          = true;         end
+if ~isfield(cfg,'sig'),         cfg.sig         = true;         end
+if ~isfield(cfg,'ebvarargin'),  cfg.ebvarargin  = {};           end
+
+%% setup comparison
+ii=0;
+n = length(x);
+compares = NaN(n*(n-1)/2,2);
+for g1 = 1:(n-1)
+    for g2 = (g1+1):n
+        ii = ii+1;
+        compares(ii,1) = g1;
+        compares(ii,2) = g2;
+    end
+end
+
+%% stats
+p = NaN(size(compares,1),1);
+for c = 1:size(compares,1)
+    if ~isempty(x{compares(c,1)}) && ~isempty(x{compares(c,2)})
+    switch cfg.stats
+        case 'ranksum', [p(c) h(c) stats(c)] = ranksum(x{compares(c,1)}, x{compares(c,2)});
+        case 'ttest2', [h(c) p(c) c(c) stats(c)] = ttest2(x{compares(c,1)}, x{compares(c,2)});
+        case 'mwwtest', 
+            stats(c) = mwwtest(x{compares(c,1)}, x{compares(c,2)});
+            p(c) = stats(c).p;
+    end
+    else 
+        p(c) = NaN;
+    end
+end
+% 
+% %-- effect size
+% for c = 1:size(compares,1)
+%     if ~isempty(x{compares(c,1)}) && ~isempty(x{compares(c,2)})
+%         switch cfg.stats
+%             case 'mwwtest',
+%                 stats(c).auc = colAUC(...
+%                     cat(1,x{compares(c,1)},x{compares(c,2)}),...
+%                     cat(1,ones(length(x{compares(c,1)}),1),2*ones(length(x{compares(c,2)}),1)));
+%         end
+%     end
+% end
+
+
+%% setup data
+colormap(cfg.colormap);
+hold on;
+mu=cell2mat(cellfun(@(x) nanmean(x), x, 'uniformoutput', false));
+switch cfg.eb
+    case 'sem', sigma=cell2mat(cellfun(@(x) nanstd(x)/sqrt(length(x)), x, 'uniformoutput', false));
+    case 'std', sigma=cell2mat(cellfun(@(x) nanstd(x), x, 'uniformoutput', false));
+end
+%% plot mean
+if cfg.bar
+handles.bar=bar(mu);
+if size(cfg.facecolor,1)>1
+    colormap(cfg.facecolor)
+    bar_child=get(handles.bar,'Children');
+    set(bar_child,'CData',mu);
+    set(bar_child,'CDataMapping','direct');
+    set(bar_child, 'CData',1:length(mu));
+else
+    set(handles.bar,'FaceColor',cfg.facecolor);
+end
+end
+%% plot eb
+if cfg.eb
+    handles.eb = errorbar(1:length(mu),mu, sigma,sigma, cfg.ebvarargin{:});
+end
+%% plot sig.
+if cfg.sig
+hl = ylim;
+h = hl(2);%max(mu+sigma);
+l = hl(1);%min(mu-sigma);
+handles.sig1tail = plot(compares',(repmat(h+[1:size(compares,1)]'*(h-l)/cfg.sigspread,1,2).*([p p] < .1))', 'LineStyle','--', 'Color',cfg.sigcolor, 'linewidth',cfg.sigwidth);
+handles.sig2tail = plot(compares',(repmat(h+[1:size(compares,1)]'*(h-l)/cfg.sigspread,1,2).*([p p] < .05))',cfg.sigcolor, 'linewidth',cfg.sigwidth);
+
+%% plot stars
+%-- one tail
+alpha = .1;
+sig = repmat({''},1,size(compares,1));
+if sum(p<alpha)>0
+    sig(p < alpha) = cellfun(@(x) cat(2,x,'.'), sig(p < alpha), 'Uniformoutput', false);
+end
+%-- two tails
+alpha = .05;
+sig = repmat({''},1,size(compares,1));
+for s = 1:cfg.maxsig
+    if sum(p<alpha)>0
+        sig(p < alpha) = cellfun(@(x) cat(2,x,'*'), sig(p < alpha), 'Uniformoutput', false);
+        alpha = alpha/10;
+    else
+        break
+    end
+end
+%-- plot stars
+handles.txt = text(mean(compares')',h+[1:size(compares,1)]'*(h-l)/cfg.sigspread,sig, ...
+    'FontSize',cfg.fontsize, ...
+    'horizontalalignment', 'center', ...
+    'verticalalignment','middle',...
+    'BackgroundColor', cfg.bkgcolor);
+%% make it pretty
+axis([xlim l-(h-l)/(.3*cfg.sigspread) h+size(compares,1)*(h-l)/(.90*cfg.sigspread)]);
+end
+set(gca,'xtick', 1:n);

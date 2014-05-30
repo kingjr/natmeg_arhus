@@ -1,0 +1,126 @@
+function  ft_jr_art_plot(component,cfg)
+% ft_jr_art_plot(component[,cfg])
+%
+% plot artefact detection and correction results
+%
+% requires: ft_jr_art.m
+%--------------------------------------------------------------------------
+% Jean-Rémi King
+%--------------------------------------------------------------------------
+
+
+if nargin == 1
+    cfg = [];
+end
+
+%
+if ~isfield(cfg,'plot_art_detect'),                     cfg.plot_art_detect = true;     end
+if ~isfield(cfg,'plot_mean_art'),                       cfg.plot_mean_art= true;        end
+if ~isfield(cfg,'plot_mean_art_topo'),                  cfg.plot_mean_art_topo= true;   end
+if ~isfield(cfg,'plot_latent_corr'),                    cfg.plot_latent_corr= true;     end
+if ~isfield(cfg,'plot_mean_art_topo_gen'),              cfg.plot_mean_art_topo_gen= true;   end
+if ~isfield(cfg,'plot_mean_art_topo_gen_corrected'),    cfg.plot_mean_art_topo_gen_corrected= true;   end
+if ~isfield(cfg,'plot_selected_topo'),                  cfg.plot_selected_topo= true;   end
+
+n_subplots = cfg.plot_art_detect +....
+    cfg.plot_mean_art + ...
+    cfg.plot_mean_art_topo + ...
+    cfg.plot_latent_corr + ...
+    cfg.plot_mean_art_topo_gen + ...
+    cfg.plot_mean_art_topo_gen_corrected+...
+    cfg.plot_selected_topo;
+sb = 0;
+
+
+% plot layout artefact
+if ~isfield(cfg, 'layout'), cfg.layout = cell(length(component.cfg.chantypes),1); end
+
+% automatically determines scale
+if ~isfield(cfg,'scales'),
+    if length(component.cfg.chantypes) == 1 && strcmpi(component.label{1}(1:3), 'EEG')
+        cfg.scale = [-1 1] .* 10^-3;
+    elseif length(component.cfg.chantypes) == 1 && strcmpi(component.label{1}(1:3), 'MEG')
+        cfg.scale = [-1 1] .* 10^-11;
+    elseif length(component.cfg.chantypes) == 2 && strcmpi(component.label{1}(1:3), 'MEG')
+        cfg.scale = [[-5 5] .* 10^-12; [-1 1] .* 10^-12];
+    end
+end
+
+clf;set(gcf,'name',component.cfg.dataset,'color','w');
+%-- artefact finding
+if cfg.plot_art_detect
+    sb =sb+1;
+    subplot(n_subplots,1,sb);cla;hold on;
+    plot(component.trials.artchan,'b');
+    scatter(component.trials.all_trl(component.trials.trl_sel.train), ...
+        repmat(median(component.artchan_trial),...
+        length(component.trials.trl_sel.train),1),'*r');
+    scatter(component.trials.all_trl(component.trials.trl_sel.test),...
+        repmat(median(component.artchan_trial),...
+        length(component.trials.trl_sel.test),1),'*g');
+    
+    axis([0 length(component.artchan_trial) ylim]);
+    title('artefact channel and artefact detection');box off;
+end
+for chantype = 1:length(component.cfg.chantypes)
+    sb = cfg.plot_art_detect-1;
+    %-- average artefact
+    if cfg.plot_mean_art
+        sb = sb+1;
+        subplot(n_subplots,length(component.cfg.chantypes),length(component.cfg.chantypes)*sb+chantype);cla;
+        plot(component.time, component.avg(component.cfg.artchan,:),'b');
+        axis([min(component.time) max(component.time) ylim]);
+        title(['channel: ' num2str(component.cfg.artchan)]);box off;
+    end
+    %-- average ERP
+    if cfg.plot_mean_art_topo
+        sb=sb+1;
+        subplot(n_subplots,length(component.cfg.chantypes),length(component.cfg.chantypes)*sb+chantype);cla;
+        imagesc(component.time,component.cfg.chantypes{chantype},component.avg(component.cfg.chantypes{chantype},:),cfg.scale(chantype,:));%normal
+        title(['ERP ' num2str(chantype)]);box off;
+    end
+    %-- correlation & latent values
+    if cfg.plot_latent_corr
+        sb = sb+1;
+        subplot(n_subplots,length(component.cfg.chantypes),length(component.cfg.chantypes)*sb+chantype);cla; hold on;
+        scatter(abs(component.corr(chantype).R),component.pca(chantype).latent, '+b');
+        scatter(abs(component.corr(chantype).R(1:size(component.rm_components{chantype},1))),component.pca(chantype).latent(1:size(component.rm_components{chantype},1)), 'r', 'filled');
+        axis([0 1 0 1]);box off;xlabel('R'); ylabel('Latent');
+    end
+    
+    %-- original independent
+    if cfg.plot_mean_art_topo_gen
+        sb = sb+1;
+        subplot(n_subplots,length(component.cfg.chantypes),length(component.cfg.chantypes)*sb+chantype);cla;
+        imagesc(component.time,component.cfg.chantypes{chantype},component.avg2(component.cfg.chantypes{chantype},:),cfg.scale(chantype,:));
+        title(['Corrected ERP ' num2str(chantype)]);box off;
+    end
+    %-- correction
+    if cfg.plot_mean_art_topo_gen_corrected
+        sb = sb+1;
+        subplot(n_subplots,length(component.cfg.chantypes),length(component.cfg.chantypes)*sb+chantype);cla;
+        imagesc(component.time,component.cfg.chantypes{chantype},component.clear_art(component.cfg.chantypes{chantype},:),cfg.scale(chantype,:));
+        title(['Corrected ERP ' num2str(chantype)]);box off;
+    end
+    %-- plot topo
+    if cfg.plot_selected_topo
+        sb = sb+1;
+        if ~isempty(cfg.layout{chantype});
+            % for each removed component
+            for topo = 1:length(component.rm_components{chantype})
+                X = [component.pca(chantype).coeff(:,component.rm_components{chantype}(topo)); 0;0];
+                cfg_plot = [];
+                cfg_plot.layout = cfg.layout{chantype};
+                cfg_plot.label = cfg_plot.layout.label;
+                cfg_plot.zlim = [-3 3].*mad(X) + median(X);
+                cfg_plot.marker= 'off';
+                subplot(n_subplots,...
+                    length(component.cfg.chantypes)*length(component.rm_components{chantype}),...
+                    length(component.cfg.chantypes)*length(component.rm_components{chantype})*sb+...
+                    (chantype-1)*length(component.rm_components{chantype})+topo);cla;
+                my_plot_topo(X,cfg_plot);
+            end
+        end
+    end
+end
+return

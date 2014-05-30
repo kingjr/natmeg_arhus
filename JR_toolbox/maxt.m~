@@ -1,0 +1,77 @@
+function [h p tt cthresh uh up] = TMax(x,m,alpha,maxperm)
+% FUNCTION TMax
+%  [h p tt cthresh uh up] = TMax(x,m,alpha[,maxperm])
+% compute Tmax of a matrix x (samples * dimension) @ alpha,using a *full*
+% permutation test n<maxperm0.
+% -- input
+%      x:           matrix where lines are different instances, and columns
+%                   dimensions
+%      m:           mean to be compared to
+%      alpha:       (optional) alpha value for test
+%      maxperm:     max number of permutation
+% -- output
+%      h:           hypothesis verified up to alpha
+%      p:           p value
+%      cthresh:     corrected t threshold
+%      uh:          uncorrected h
+%      up:          uncorrected p
+%
+% necessitates stats toolbox
+%--------------------------------------------------------------------------
+% (c) JR KING: jeanremi.king+matlab [at] gmail.com, all rights reserved
+%--------------------------------------------------------------------------
+%%
+
+%-- arguments
+if nargin <= 1, m       = .5;end            % mean null hypothesis
+if nargin <= 2, alpha   = .05;end           % alpha value
+
+xsize           = size(x);                  % save size x
+x               = reshape(x,xsize(1),[]);   % flatten x
+d               = size(x,2);                % number of dimensions
+
+%-- Generate all labellings of size(x,1) scans as +/- 1
+perms=[];
+perm_nb = shuffle(0:size(x,1)-1);
+for i = perm_nb;
+    try 
+        perms=[ones(2^i,1),perms;-ones(2^i,1),perms];
+        if size(perm,1) > maxperm
+            
+    catch
+        break % use max memory
+    end
+end
+n = size(perms,1);                          % number of permutations
+
+if n > maxperm
+    n           = maxperm;
+    perms       = shuffle(perms);
+else
+    t               = NaN .* ones(n,d);         % initialize value
+end
+%-- test each permutation
+for perm = 1:n                              % for each permutation
+    try progressbar(perm,n);end             % display progression
+    [h p c stats]= ttest(repmat(perms(perm,:),d,1)' .* x,m);
+    t(perm,:)   = stats.tstat;              % resample t value
+end
+
+mt              = max(abs(t'));             % max t distribution
+cthresh         = prctile(mt,100*(1-alpha));% corrected threshold
+[uh up c stats] = ttest(x,m);               % ttest for true sample
+tt              = stats.tstat;              % true t value
+h               = (tt > cthresh);           % test null hypothesis: is true t > corrected alpha
+for ii = 1:d                                % for each dimension
+    p(ii)       = sum(mt > tt(ii))/n;       % corrected p value
+end
+%return array as it was
+try
+    p = reshape(p,xsize(2:end));
+    up = reshape(up,xsize(2:end));
+    h = reshape(h,xsize(2:end));
+    uh = reshape(uh,xsize(2:end));
+    tt = reshape(tt,xsize(2:end));
+end
+
+return

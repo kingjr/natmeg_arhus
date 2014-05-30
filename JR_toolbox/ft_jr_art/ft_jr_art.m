@@ -1,0 +1,189 @@
+function Y = ft_jr_art(cfg)
+%% data_art = ft_jr_art(cfg)
+% automatically removes artefacts based on specificity (correlations) and
+% sensitivity (% variance explained)
+% -------------------------------------------------------------------------
+% The method is based on
+%       1. finding artefact either
+%               based on a given channel, or a set of channels
+%               or from an ICA
+%       2. building a template of stereotyped artefact
+%       3. finding the combination of channels that explains most of the
+%       template artefact
+%       4. regressing out this combination from the data
+%       5. verifying on a maximally different dataset whether it works
+%
+% The non-traditional features are:
+%       - stereotyped artefacts are based on robust mean across trials and
+%       not means as the M/EEG spreads in a log space, one trial can
+%       dramatically affects the steretopyed pattern.
+%       - stereotyped artefacts are normalized by the MAD, in order to
+%       avoid a few bad channels to capture most of the variance.
+%       - the correlations between the principal components and the
+%       artefacted channels can be used to see whether the corrected
+%       topography is actually specific to the artefact. This is mainly
+%       useful in MEG, as in EEG topographies are largely overlapping.
+% -------------------------------------------------------------------------
+% requires
+%   - stats toolbox         should be change for independence
+%   - Fieldtrip:            http://fieldtrip.fcdonders.nl/
+%   - MNE toolbox for neuromag
+% -------------------------------------------------------------------------
+% (c) 2012 Jean-Rémi KING
+% jeanremi.king+matlab@gmail.com
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% -------------------------------------------------------------------------
+%-- modifications:
+%       20120812        (JRK) full redesign function + add ICA/PCA option
+%                               in case ECG isn't good enough
+%
+%       20120629:       (IEK) fix redundancies in trialfun
+%
+%       20120629:       (IEK) add trl removal for inconvenient time periods
+%
+%       20120628:       (JRK) add auto rm bad channels
+%
+%       20120628:       (JRK) makes correlations optional
+%
+%       20120628:       (JRK) add dipole computation in case of multiple
+%                       artefacted channels
+%
+%       20120628:       (JRK) channel loop to avoid memory issues
+%
+%       20120627:       (JRK) randomize trials to time independent artefact
+%       + optimization + simplification of continuous signal processing
+%
+% to be done:
+%   - making optional checkup on independent data
+%   - cleaning script: not cdg specific anymore, add commentaries, get ridd
+%   off of multiple cfg
+%   - add help to apply correction on future data
+%   - redo the help to complete all cfg fields
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Default parameters
+%-- check fields
+if ~isfield(cfg,'dataset'),     error('needs cfg.dataset');                 end
+
+if ~isfield(cfg,'hdr'),
+    disp(['Read ' cfg.dataset]);
+    evalc('hdr = ft_read_header(cfg.dataset);');
+else
+    hdr = cfg.hdr;
+end
+
+if ~isfield(cfg,'chantypes'),   cfg.chantypes   = {1:hdr.nChans};           end % cells dividing types of sensors (gradiometers, etc)
+if ~isfield(cfg,'void'),        cfg.void        = true;                     end % void
+if ~isfield(cfg,'template'),    cfg.template    = 'predefined_chan';        end % defines method to define template artifact
+if ~isfield(cfg,'trials'),      cfg.trials      = [];                       end % see ft_jr_art_chan or ft_jr_ecg_ica for specific fields
+if ~isfield(cfg,'comp'),        cfg.comp        = [];                       end % see ft_jr_art_get_component
+if ~isfield(cfg,'gen'),         cfg.gen         = [];                       end % see ft_jr_art_generalize
+if ~isfield(cfg,'corr'),        cfg.corr        = [];                       end % see ft_jr_art_corr
+if ~isfield(cfg,'correct'),     cfg.correct     = [];                       end % see ft_jr_art_correct
+if ~isfield(cfg,'layout'),      cfg.layout      = [];                       end 
+
+%% Define generic functions
+%-- automatic printing
+if cfg.void, print = @(x) disp([repmat('-',1,10) ' ' x ' ' repmat('-',1,60-length(x))]);
+else         print = @(x) false; end
+
+%% Build template
+cfg.trials.dataset              = cfg.dataset;          % dataset
+cfg.trials.chantypes            = cfg.chantypes;        % chantypes
+switch cfg.template
+    case 'predefined_chan'
+        print(['1. Building template with channel ' hdr.label{cfg.trials.artchan}]);
+        [data_trials cfg.trials]= ft_jr_art_chan(cfg.trials);
+    case 'ecg_ica'
+        print('1. Building template with ICA');
+        [data_trials cfg.trials]= ft_jr_ecg_ica(cfg.trials);
+        Y.trials.Cweights       = data_trials.Cweights;
+        Y.trials.Cmedmad        = data_trials.Cmedmad;
+        Y.trials.Cscores        = data_trials.Cscores;
+end
+% out
+%>> don't forget to output: 
+%           data_trials.trials
+%           data_trials.artchan_trl
+%           data_trials.cfg.rm_badchan
+Y.trials.artchan                = data_trials.data_artchan;     % data of component used for artefact detection
+Y.trials.artchan_mean           = squeeze(trimmean(data_trials.artchan_trl,90,'round',3));
+Y.trials.time                   = data_trials.time;             %
+Y.trials.trl_sel                = data_trials.trl_sel;          % trials
+Y.trials.all_trl                = data_trials.all_trl;          % trials
+Y.trials.cfg                    = cfg.trials;
+
+for chantype = 1:length(cfg.chantypes)
+    
+    %% Select channels
+    print(['[Chantype: ' num2str(chantype) '...']);
+    data                            = cellfun(@(x) x(cfg.chantypes{chantype},:), data_trials.trial, 'UniformOutput',false);
+
+    %% Find main components
+    print('2. Finding main explanatory components');
+    cfg_comp                        = cfg.comp;
+    cfg_comp.void                   = cfg.void;                     % display feedback
+    cfg_comp.trl_sel                = Y.trials.trl_sel.train;% training trial info
+    cfg_comp.rm_badchan             = Y.trials.cfg.rm_badchan;        % bad channels
+    [data_comp cfg_comp]            = ft_jr_art_get_component(data,cfg_comp);
+    % out
+    Y.comp.avg(cfg.chantypes{chantype},:)= data_comp.avg;
+    Y.comp.pca(chantype).coeff      = data_comp.coeff;
+    Y.comp.pca(chantype).score      = data_comp.score;
+    Y.comp.pca(chantype).latent     = data_comp.latent;
+    Y.comp.rm_latent{chantype}      = data_comp.rm_latent;
+    Y.comp.cfg                      = cfg_comp;
+    clear data_comp;
+    
+    %% Compute generalization
+    print('3. Computing generalization');
+    cfg_gen                         = cfg.gen;
+    cfg_gen.trl_sel                 = Y.trials.trl_sel.test;
+    cfg_gen.coeff                   = Y.comp.pca(chantype).coeff;
+    [data_gen cfg_gen]              = ft_jr_art_generalize(data,cfg_gen);
+    % out
+    Y.gen.avg{chantype}             = data_gen.avg;
+    Y.gen.cfg                       = cfg_gen;
+    
+    %% Compute correlation
+    print('4. Computing correlation');
+    cfg_corr                        = cfg.corr;
+    cfg_corr.artchan                = data_trials.artchan_trl;
+    [data_corr cfg_corr]            = ft_jr_art_corr(...
+        data_gen.gen,...
+        data_trials.artchan_trl(:,:,Y.trials.trl_sel.test),...
+        cfg_corr);
+    % out
+    Y.corr.R{chantype}              = data_corr.R;
+    Y.corr.p{chantype}              = data_corr.p;
+    Y.corr.threshold{chantype}      = data_corr.threshold;
+    Y.corr.cfg                      = cfg_corr;
+    Y.corr.rm_corr{chantype}        = data_corr.rm_corr;
+    clear data_gen data_corr;
+    
+    %% Apply artefact correction
+    print('5. Correcting artefact');
+    cfg_correct                     = cfg.correct;
+    cfg_correct.rm_corr             = Y.corr.rm_corr{chantype};
+    cfg_correct.rm_latent           = Y.comp.rm_latent{chantype};
+    cfg_correct.coeff               = Y.comp.pca(chantype).coeff;
+    [data_correct cfg_correct]      = ft_jr_art_correct(Y.gen.avg{chantype},cfg_correct);
+    % out
+    Y.correct.remove{chantype}      = data_correct.remove;
+    Y.correct.keep{chantype}        = data_correct.keep;
+    Y.correct.clear{chantype}       = data_correct.clear;
+    Y.correct.avg_clean{chantype}   = data_correct.avg_clean;
+    Y.correct.avg_dirty{chantype}   = data_correct.avg_dirty;
+    Y.correct.cfg                   = cfg_correct;
+    clear data_correct;
+    print(['... // chantype: ' num2str(chantype) ']']);
+end
+%% Out 
+Y.cfg = cfg;
+Y.label = hdr.label;
+if iscell(Y.trials.artchan)
+    Y.trials.artchan = cell2mat(Y.trials.artchan);
+end
+
+return

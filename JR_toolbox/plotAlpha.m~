@@ -1,0 +1,21 @@
+function plotAlpha(x,y,alpha, color, linewidth)
+if nargin < 3
+    alpha = y;
+    y = x;
+    x = 1:size(y,2);
+end
+if nargin < 4
+    color = 'b';
+end
+if nargin < 5
+    linewidth = 1;
+end
+hold on
+for l = 1:size(y,1)
+patch([x fliplr(x)],[y(l,:) fliplr(y(l,:))], 'w', ...
+    'facealpha', 0,...
+    'edgealpha', alpha,...
+    'linewidth', linewidth);
+end
+
+    

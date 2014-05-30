@@ -1,0 +1,10 @@
+function [poly h] = contourfill2(xs,ys,data, varargin)
+for ii = 1:2:length(varargin)
+    eval([varargin{ii}  '=varargin{ii+1};']);
+end
+if ~exist('level','var'), level =  [prctile(data(:),[25 50 75])]; end
+
+hold on;
+for ii = length(level):-1:1
+    [poly{ii} h] = contourfill(xs,ys,data,[level(ii) max(data(:))], varargin{:});
+end

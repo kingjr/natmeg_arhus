@@ -1,0 +1,20 @@
+function img=export_png(name,xy)
+
+if nargin == 1
+    xy = get(gcf,'position');
+end
+drawnow;pause(.1);drawnow;
+robo = java.awt.Robot;
+t = java.awt.Toolkit.getDefaultToolkit();
+rectangle = java.awt.Rectangle(t.getScreenSize());
+image = robo.createScreenCapture(rectangle);
+filehandle = java.io.File('tmp.png');
+javax.imageio.ImageIO.write(image,'png',filehandle);
+img=imread('tmp.png');delete('tmp.png');
+if nargin>1
+    img = img(xy(1):xy(2),xy(3):xy(4),:);
+end
+imwrite(img,name, 'png');
+if nargout == 1
+    img = imread(name);
+end

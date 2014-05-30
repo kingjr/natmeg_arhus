@@ -1,0 +1,93 @@
+function object = svg2mat(file)
+% object = svg2mat(file)
+% import *.svg vectorial files (see inkscape)
+% return object: structure having paths and images as properties.
+% 
+% make sure all lines are straight (for curves, => add many nodes)
+
+object = {};
+fid = fopen(file,'r');
+while 1
+    tline = fgetl(fid);
+    if findstr(tline, '<path')                                             % scan document until find object
+        tline = '';object(end+1).info = {'path'};                          % add unused info
+        while isempty(findstr(tline, 'd='))                                % scan line until find dots locations
+            tline = fgetl(fid);
+            object(end).info{end+1} = tline;
+            if findstr(tline, 'id=')
+                tline = [];
+            end
+        end
+        tline = strrep(tline, 'd="', ' ');                                 % remove beginning of line
+        tline = strrep(tline, 'C', ' ');                                   % replace c (curve points) by space 
+        tline = strrep(tline, 'c', ' ');                                   % replace c (curve points) by space 
+        tline = strrep(tline, 'M', ' ');                                   % replace M by space 
+        tline = strrep(tline, 'm', ' ');                                   % replace M by space 
+        tline = strrep(tline, ',', ' ');                                   % format delimiter
+        rawPoints = textscan(tline, '%s');                                 % extract point
+        try
+            object(end).xy = [str2double(rawPoints{1}{1}) str2double(rawPoints{1}{2})];% xy of object
+            %object(end).xy = cell2mat(textscan(rawPoints{1}{2},'%f%f', 'delimiter', ','));% xy of object
+            object(end).points = [0 0];%cell2mat(object(end).xy);
+            for point = 3:2:length(rawPoints{1})                           % relative xy of points
+                    %cr = textscan(rawPoints{1}{point},'%f%f', 'delimiter', ',');
+                    cr = [str2double(rawPoints{1}{point}), str2double(rawPoints{1}{point + 1})];
+                    object(end).points(end+1,1:2) = cr;
+            end
+
+        catch
+            fclose(fid);
+            error('invalid points: there is probably curves in the data; make sure each line is straight');
+        end
+        
+        %-- add other info
+        tline = '';
+        while not(findstr(tline, '/>'))                                    % add unused info
+            tline = fgetl(fid);
+            object(end).info{end+1} = tline;
+        end
+        
+        %-- reput plot in true space
+
+        if abs(nanmedian(object(end).points)) < 1 % relative coordinates
+            for point = 2:size(object(end).points,1)
+                object(end).points(point,1:2) = object(end).points(point,1:2)...
+                    + object(end).points(point-1,1:2);                     % points are stored in an additional manner
+            end
+            object(end).points(:,1) = object(end).points(:,1) + object(end).xy(1);
+            object(end).points(:,2) = object(end).points(:,2) + object(end).xy(2);
+        else
+            object(end).points =object(end).points(2:end,:) ;              % remove zero
+        end
+        object(end).points(:,2) = object(end).points(:,2).*-1;             % revert y axis in matlab
+    elseif findstr(tline, '<image')                                        % scan document until find object
+        object(end+1).info = {'image'};
+        while 1
+            tline = fgetl(fid);
+            if findstr(tline,'x=')
+                x = str2num(strtok(tline(findstr(tline,'x=')+3:end),'"'));
+            elseif findstr(tline,'y=')
+                y = str2num(strtok(tline(findstr(tline,'y=')+3:end),'"'));
+            elseif findstr(tline,'height=')
+                h = str2num(strtok(tline(findstr(tline,'height=')+8:end),'"'));
+            elseif findstr(tline,'width=')
+                w = str2num(strtok(tline(findstr(tline,'width=')+7:end),'"'));
+%                 str2num(tline(findstr(tline,'width=')+7:end-1));
+            elseif findstr(tline,'xlink:href=')
+                object(end).ref = tline(findstr(tline,'href=')+6:end-1);
+            end
+            if findstr(tline,'/>')
+                break
+            end
+        end
+        object(end).xy = [x y];
+        object(end).size = [h w];
+    elseif findstr(tline,'</svg')                                           % scan document until end
+        fclose(fid);
+        break
+    elseif strcmp(tline,'-1')
+        fclose(fid);
+        error('problem parsing document')
+    end
+end
+

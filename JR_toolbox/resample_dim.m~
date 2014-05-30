@@ -1,0 +1,11 @@
+function X = resample_dim(X,P,Q,dim)
+% Y = resample_dim(X,P,Q,dim);
+% (c
+dims    = size(X);
+X       = permute(X,[dim setdiff(1:length(dims),dim)]);
+index   = [dim setdiff(1:length(dims),dim)];
+X       = reshape(X,size(X,1),[]);
+X       = resample(X,P,Q);
+X       = reshape(X,[size(X,1), dims(setdiff(1:length(dims),dim))]);
+[unused index_sorted] = sort(index);
+X       = permute(X, index_sorted);

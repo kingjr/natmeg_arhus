@@ -1,0 +1,33 @@
+function all=build_composite_img(colors,img,n_column,space)
+
+img = imread(img);
+all = [];
+for jj = 1:ceil(length(colors)/n_column)
+    index = ((jj-1)*n_column+1):((jj-1)*6+n_column);
+    if find(index>length(colors))
+        index(index>length(colors)) = [];
+    end
+    line = newline(colors(index,:),img,space(1));
+    if 
+    white = 255*ones(space(2),size(all,2),size(all,3));
+    all = cat(1,all,cat(2,line, 255*ones(size(all,2)-size(line,2),size(img,3))));
+end
+
+
+
+return
+
+function line = newline(colors,img,space)
+line = [];
+white = 255*ones(size(img,1),space,size(img,3));
+for ii = 1:length(colors)
+    line = cat(2,line,white, newimg(colors(ii,:),img));
+end
+
+return
+
+function img = newimg(color,img)
+index = find(img<255);
+c = repmat(permute(color,[1 3 2]),[size(img,1),size(img,2)]);
+img(index) = double(255-img(index)).*double(c(index));
+return

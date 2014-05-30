@@ -1,0 +1,110 @@
+function varargout = plot_connectivity(pnt, chan1, chan2, value, cfg)
+% Q3D = plot_connectivity(pnt, chan1, chan2, cfg)
+% - inputs
+%       pnt: all channels positions (n_channels,3_xyz) (get from layout);
+%       chan1: channel 1
+%       chan2: channel 2
+%- - output: Q3D: plot it as follow: 
+%        plot3(Q3D(:,1),Q3D(:,2),Q3D(:,3)
+%
+% requires bezierInterp: 
+% http://www.mathworks.com/matlabcentral/fileexchange/7441-bezier-interpolation-in-n-dimension-space
+%
+% (c) Jean-Rémi King 2011
+
+if nargin == 4, cfg = []; end
+if ~isfield(cfg,'res'),         cfg.res         = 100;              end     % arc resolutions
+if ~isfield(cfg,'pltchan'),     cfg.pltchan     = 0;                end     % plot all channel
+if ~isfield(cfg,'pltconnect'),  cfg.pltconnect  = 1;                end     % plot connection
+if ~isfield(cfg,'loop_type'),   cfg.loop_type   = 'sphere';            end     % type of bezier
+if ~isfield(cfg,'alim'),        cfg.alim        = [0 1 1];          end     % alpha limt
+if ~isfield(cfg,'radius'),      cfg.radius      = 'sphere';      end     % type of radius (sphere, euclidian)
+if ~isfield(cfg,'Rtimes'),      cfg.Rtimes      = 10;               end     % R times
+if ~isfield(cfg,'Rexp'),        cfg.Rexp        = 1;                end     % R exp
+if ~isfield(cfg,'linewidth'),   cfg.linewidth   = 1;                end     % linewidth
+if ~isfield(cfg,'color'),       cfg.color       = [0 0 0];          end     % line color
+
+% calculate center of head
+center = mean(pnt);
+t=linspace(0,1,cfg.res);
+
+% 3D Bezier Interplation
+if cfg.pltchan
+    scatter3(pnt(:,1),pnt(:,2),pnt(:,3));hold on;
+end
+%-- calculate radius
+switch cfg.radius
+    case 'sphere'
+        R = (1+(max(sqrt(sum(pnt(chan1,:).^2)),sqrt(sum(pnt(chan2,:).^2))))*2*atan2(norm(cross(pnt(chan1,:),pnt(chan2,:))),dot(pnt(chan1,:),pnt(chan2,:)))*cfg.Rtimes)^cfg.Rexp;
+    case 'euclidian'
+        R = (1+(sum((pnt(chan1,:)-pnt(chan2,:)).^2)*cfg.Rtimes)).^cfg.Rexp;
+        disp(R);
+    otherwise
+        error('unknown radius type')
+end
+disp(R);
+%-- calculate bezier bases
+[tmp tmp r1]        = cart2sph(pnt(chan1,1),pnt(chan1,2),pnt(chan1,3));     % transform into sphere coordinate
+[tmp tmp r2]        = cart2sph(pnt(chan2,1),pnt(chan2,2),pnt(chan2,3));
+[th phi tmp]        = cart2sph(mean(pnt([chan1 chan2],1)),mean(pnt([chan1 chan2],2)),mean(pnt([chan1 chan2],3))); % find middle on sphere
+[middle(1) middle(2) middle(3)] = sph2cart(th2,phi2,(r1+r2+r2)/3*R);        % inflate sphere
+control_11          = middle - (pnt(chan1,:) - pnt(chan2,:))/4;             % create bezier controllers
+control_12          = middle - (pnt(chan1,:) - pnt(chan2,:))/4;
+control_21          = middle + (pnt(chan1,:) - pnt(chan2,:))/4;
+control_22          = middle + (pnt(chan1,:) - pnt(chan2,:))/4;
+
+%-- show constructors
+% scatter3(middle_1(1),middle_1(2),middle_1(3));
+% scatter3(middle_2(1),middle_2(2),middle_2(3));
+
+%-- construct bezier 1
+Px=[pnt(chan1,1) control_11(1) control_12(1) middle(1)];
+Px=[pnt(chan1,2) control_11(2) control_12(2) middle(2)];
+Px=[pnt(chan1,3) control_11(3) control_12(3) middle(3)];
+[Q3D_1]=bezierInterp(...
+    [Px(1),Py(1),Pz(1)],...
+    [Px(2),Py(2),Pz(2)],...
+    [Px(3),Py(3),Pz(3)],...
+    [Px(4),Py(4),Pz(4)],t);
+Px=[middle(1) control_21(1) control_22(1) pnt(chan2,1)];
+Px=[middle(2) control_21(1) control_22(1) pnt(chan2,2)];
+Px=[middle(3) control_21(1) control_22(1) pnt(chan2,3)];
+[Q3D_2]=bezierInterp(...
+    [Px(1),Py(1),Pz(1)],...
+    [Px(2),Py(2),Pz(2)],...
+    [Px(3),Py(3),Pz(3)],...
+    [Px(4),Py(4),Pz(4)],t);
+
+%-- color
+
+%-- format transparency value into [0 1]
+value = (value - cfg.alim(1))/(cfg.alim(2)-cfg.alim(1))/cfg.alim(3);
+if value < 0,       value = 0;
+elseif value > 1,   value = 1;end
+
+if nargout == 1
+    varargout = {[Q3D_1 Q3D_2]};
+else
+    %-- plot connection
+    if cfg.pltconnect
+        h = patch(Q3D(:,1),Q3D(:,2),Q3D(:,3),'k', 'FaceAlpha', 0, 'EdgeAlpha', min([value 1]), 'EdgeColor', cfg.color, 'LineWidth',cfg.linewidth);
+        varargout = {h};
+    end
+end
+return
+
+% switch cfg.loop_type
+%     case 'triangle'
+%         middle_1 = (pnt(chan1,:) - center)* R + center * R;
+%         middle_2 = (pnt(chan2,:) - center)* R + center * R;
+%         middle_1 = mean([middle_1; middle_2]);
+%         middle_2 = middle_1;
+%     case 'rectangle'
+%         middle_1 = (pnt(chan1,:) - center)* R + center * R;
+%         middle_2 = (pnt(chan2,:) - center)* R + center * R;
+%     case '2/3'
+%         middle_1a = (pnt(chan1,:) - center)* R + center * R;
+%         middle_2a = (pnt(chan2,:) - center)* R + center * R;
+%         middle_1 = mean([middle_1a; middle_1a; middle_2a]);
+%         middle_2 = mean([middle_2a; middle_2a; middle_1a]);
+%     case 'sphere'

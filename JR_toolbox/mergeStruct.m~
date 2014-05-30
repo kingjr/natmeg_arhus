@@ -1,0 +1,5 @@
+function strct = mergeStruct(strct1,strct2)
+strct = strct1;
+for ii = 1:length(strct2)
+strct{length(strct1)+ii = strct2(ii);
+end

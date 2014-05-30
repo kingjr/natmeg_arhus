@@ -1,0 +1,14 @@
+function cart = npol2ncart(r,th)
+%POL2CART Transform n-dimensional polar coordinates to n-dimensional
+%Cartesian coordinates.
+% npol2ncart(r,th)
+if size(th,1) ~= size(r,1), error('radius and thetas should have compatible dimensionalities'); end
+n_points    = size(th,1);
+n_dim       = size(th,2);
+cart        = NaN(n_points, n_dim); % number of points by number of dimensions
+s           = sin(th);
+c           = cos(th);
+for dim = 1:(n_dim -1)
+    cart(:,dim) = prod(s(:,1:(dim-2)),2)*c(:,(dim-1))*r;
+end
+cart(:,n_dim) = prod(s(:,1:(n_dim-1)),2)*r;

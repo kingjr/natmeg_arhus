@@ -1,0 +1,74 @@
+function out = compute_wsmi(varargin)
+% out = compute_wsmi(x,y,varargin)
+% (c) JeanRemi King
+
+%% get default parameters
+if nargin == 2, varargin = {};end
+for ii = 1:2:length(varargin)
+    eval([varargin{ii} '=varargin{ii+1};']);
+end
+clear ii varargin
+if ~exist('kernel','var'), kernel = 3; end
+if ~exist('dict','var'), dict =  sortrows(perms(1:kernel),kernel:-1:1); end
+ns = size(dict,1);
+if ~exist('xs', 'var'), xs = symbolize(x',kernel,1,[],1);end
+if ~exist('ys', 'var'), ys = symbolize(y',kernel,1,[],1);end
+
+
+%% estimate prior probabilities
+[Xs Ys Js] = XYJ(xs,ys,ns);
+
+%% Weighting mask
+if ~exist('order','var'), order = 1; end
+mask = build_mask(dict,order,true);
+
+%% Compute estimated SMI and WMSI
+[SMI WSMI] = MI(Xs,Ys,Js,ns,mask);
+
+%% out
+vars = who;
+for var = 1:length(vars)
+    eval(['out.' vars{var} '=' vars{var} ';']);
+end
+
+function [SMI WSMI] = MI(X,Y,J,ns,mask)
+[SMI WSMI] = deal(0);
+for s1 = 1:ns
+    for s2 = 1:ns
+        smi = J(s1,s2) * log(J(s1,s2) ./ (X(s1)*Y(s2)));
+        if ~isnan(smi)
+            SMI = SMI + smi;
+            WSMI = WSMI + mask(s1,s2)*smi;
+        end
+    end
+end
+
+function [X Y J] = XYJ(x,y,ns)
+for s1 = ns:-1:1
+    X(s1,1) = sum(x==s1);
+    Y(s1,1) = sum(y==s1);
+    for s2 =ns:-1:1
+        J(s1,s2) = sum(x==s1 & y==s2);
+    end
+end
+X = X./sum(X);
+Y = Y./sum(Y);
+J = J./sum(J(:));
+
+function mask = build_mask(dict, order, symetry)
+[ns nk] = size(dict);
+mask = NaN(ns);
+for s1 = 1:ns
+    for s2 = s1:ns
+        [mask(s1,s2) mask(s2,s1)] = deal(sqrt(sum(abs(dict(s1,:)-dict(s2,:)).^2)));
+    end
+end
+if symetry
+    % compute max permutation
+    m = sqrt(sum(abs((1:nk)-(nk:-1:1)).^2));
+    % apply inverse
+    mask = squeeze(min(cat(3,mask,m-mask'),[],3));
+end
+if ~isempty(order)
+    mask = mask>order;
+end

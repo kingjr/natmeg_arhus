@@ -1,0 +1,8 @@
+function addmpath(path)
+files = dir;
+while sum(files.isdir > 2)
+    for ii = 3:length(files)
+        addmpath([path '/' files(ii)]);
+    end
+    fprintf(path
+end

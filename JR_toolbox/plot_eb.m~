@@ -1,0 +1,74 @@
+function  [handle_line handle_fill] = plot_eb(X,Y,varargin)
+% plot_eb(X,Y,['type'='sem'/'std'/'prctile'],[')
+% plot error bar
+% (c) JeanRémi King, jeanremi.king+matlab[at]gmail.com
+
+%% get argument
+if nargin < 3
+    varargin = {};
+else
+    if length(varargin)==1
+        varargin = {'color', varargin{:}};  % compatibility wrapper
+    end
+end
+for ii = 1:2:length(varargin)
+    eval([varargin{ii} '=varargin{ii+1};']);
+end
+
+if ~exist('color', 'var'), color   = [.2 .3 .9]; end
+if ~exist('type', 'var'), type = 'sem'; end
+
+%% compute nanmean
+m=nanmean(Y);
+
+s = NaN;
+switch type
+    case 'sem'
+        for x = 1:length(m)
+            s(x)=nanstd(Y(:,x)) ./ sqrt(size(Y,1) - sum(isnan(Y(:,x))));
+        end
+        area = [m-s;m+s];
+    case 'std'
+        for x = 1:length(m)
+            s(x)=nanstd(Y(:,x));
+        end
+        area = [m-s;m+s];
+    case 'prctile'
+        for x = 1:length(m)
+            s1(x)=prctile(Y(:,x),10);
+            s2(x)=prctile(Y(:,x),90);
+        end
+        area = [s1;s2];
+end
+
+%% check hold
+h = ishold;
+hold on;
+%% find contiguous segments
+stops = [1 find(mod(isnan(nanmean(Y(:,2:end)))+~isnan(nanmean(Y(:,1:(end-1)))),2)==0) size(Y,2)];
+
+%% passing variable in plotting function function
+cleanvar = @(rm) reshape(cat(1,...
+    varargin(...
+    setdiff(1:2:length(varargin),...
+    (find(ismember(varargin(1:2:end),lower(rm)))-1)*2+1)),...
+    varargin(...
+    setdiff(2:2:length(varargin),...
+    find(ismember(varargin(1:2:end),lower(rm)))*2))),1,[]);
+
+%% plot line
+vars = cat(2,{'linewidth',2,'Color',color},cleanvar({ 'type', 'rmnan', 'color', 'FaceColor', 'FaceAlpha', 'EdgeColor', 'EdgeAlpha'}));
+for ii = 1:(length(stops)-1)
+    toi = (stops(ii)+1):stops(ii+1);
+    handle_line{ii}=plot(X(toi),m(toi),vars{:});
+end
+
+%% plot error bar
+for ii = 1:(length(stops)-1)
+    toi = (stops(ii)+1):stops(ii+1);
+    vars = cat(2,{'edgecolor',color, 'FaceAlpha', .3, 'EdgeAlpha', .5},cleanvar({ 'type', 'rmnan', 'color'}));
+    handle_fill=fill([X(toi) X(toi(end:-1:1))],[area(1,toi) area(2,toi(end:-1:1))],color);
+    set(handle_fill,vars{:});
+end
+
+if ~h, hold off; end

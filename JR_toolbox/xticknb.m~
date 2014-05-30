@@ -1,0 +1,26 @@
+function xticknb(varargin)
+switch length(varargin)
+    case 3,
+        handle = varargin{1};
+        n = varargin{2};
+        keep = varargin{3};
+    case 2
+        handle = varargin{1};
+        n = varargin{2};
+        keep = false;
+    case 1
+                handle = varargin{1};
+        n = varargin{2};
+        keep = varargin{3};
+
+    handle,n,keep
+if nargin==1,
+    n = handle;
+    handle = gca;
+end
+xtick = get(handle, 'xtick');
+if n == 0
+    set(handle,'xtick', []);
+else
+    set(handle,'xtick', linspace(min(xtick), max(xtick),n));
+end

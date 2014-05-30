@@ -1,0 +1,9 @@
+function e(cmd)
+if strcmp(cmd(end), ';')
+    evalin('caller',cmd);
+else
+    start=findstr(cmd, ';');
+    if isempty(start),start = 0;end
+    cmd=varagout
+    evalin('caller',cmd);
+    

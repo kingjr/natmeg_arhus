@@ -1,0 +1,36 @@
+function plot_eb_unbalanced(X,Y,cfg)
+% idem as myeb(X,Y,cfg.color) but for unebalanced data
+
+if nargin < 3 ,    cfg = []; end
+if ~isfield(cfg, 'color'),  cfg.color   = [.2 .3 .9];     end % colors
+if ~isfield(cfg, 'bin'),    cfg.bin     = size(X,2)/10;   end % number of bins
+
+%-- cuts into bin
+Xn = min(X(:)):(max(X(:))/cfg.bin):max(X(:));
+if Xn(end) ~= max(X(:)), Xn(end+1) = max(X(:)); end
+
+for bin = 1:(length(X)-1)
+    if bin == (length(X)-1)
+    else
+        ind = (X >= Xn(bin)).* (X < Xn(bin+1));
+    end
+    for ii = 1:size(Y,1)
+        Yn(ii,bin) = Y(ii,find(ind(ii,:)
+    end
+end
+%     
+% end
+% 
+% m=nanmean(Y);
+% s=nanstd(Y) / size(Y,1); 
+% index_1=1:length(m);
+% index_2=index_1(end:-1:1);
+% 
+% hold on; 
+% g=fill([X flipdim(X,2)],[m-s m(index_2)+s(index_2)],cfg.color);
+% plot(X,m,'linewidth',2,'Color',cfg.color);
+% set(g,'edgecolor',cfg.color, 'FaceAlpha', 0.5, 'EdgeAlpha', 0); 
+%         
+% end
+% 
+% 

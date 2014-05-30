@@ -1,0 +1,58 @@
+function [predict post] = mybayes(X,y,x,cfg)
+% post = mybayes(X,y,x[,cfg])
+%
+% naive bayesian classifier using a gaussian mixture and 2 classes 
+% input
+%       X: instances x features matrix
+%       y: 1D vector containing classes (1 and 2)
+%       [cfg] : optional: cfg.class_prob changes the relative probabilities
+%       of each class.
+% output 
+%       posterior probability
+% 
+% 
+% (c) JR KING: jeanremi.king@ucl.ac.uk
+% This function classifies a to-be-tested vector (testSet) of n attributes
+% (or n dimension) using a naive bayesian classifier approach combined with
+% a gaussian distribution estimate (used for continuous inputs)
+% 
+% As a reminder, the naive bayesian approach assumes a independence of each
+% dimension/attribute (which is not the case but anyway), and hence compute
+% the probability of a class C, knowing a set of attributes x.
+%
+%
+% P(X|Ci) ~ product(P(x(k)|Ci),k=1:n)
+%
+% a) if Ak is categorical then P(x(k)|Ci) = number of samples of class Ci
+% in T having the value xk for attribute Ak, divided by freq(Ci,T), the
+% number of sample of class Ci in T.
+%
+% b) if Ak is continuous: then we assume that the values have a Gaussian
+% distribution with a mean u and standard deviant sd defined by:
+% g(x,u,sd) = 1 / sqrt(2*pi*sd) * exp(-(x-u)^2/(2*sd^2))
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%-- check if dimensions are consistent
+if size(X,1) ~= length(y);error ('Error in sets sizes');end
+y(y==min(y)) = -inf;y(y~=min(y)) = inf; % use only 1 and 2 values for y (one against all)
+y(y==min(y)) = 1;   y(y~=min(y)) = 2;
+%-- parameters
+if nargin == 3,cfg = []; end
+if ~isfield(cfg,'class_prob'), cfg.class_prob = [sum(y==1) sum(y==2)] / length(y); end % calculates probability of each class
+%-- mean & std
+for c = 1:2
+    mu(c,:) = nanmean(X(y==c,:));                                           % mean attributes given class c
+    sigma(c,:) = nanstd(X(y==c,:));                                         % STD attributes given class c
+end
+%px  = exp(-.5*((x-nanmean(X))./nanstd(X)).^2) ./sqrt(2 * pi * nanstd(X));  % p(X)
+%pxy = exp(-.5*((repmat(x,2,1)-mu)./sigma).^2) ./sqrt(2 * pi * sigma);      % P(X|Y) for each attribute using a gaussian mixture
+%pyx = (prod(pxy') .* class_prob(1:2))./ prod(px');                         % unnormalized posterior probability
+%-- conditional probabilities
+pyx         = sum(-.5*((repmat(x,2,1)-mu)./sigma).^2 -log(sigma) - 0.5 *log(2*pi),2)';
+lcp         = repmat(pyx,size(cfg.class_prob,1),1)+log(cfg.class_prob);     % log conditional probabilty
+post        = exp(lcp-repmat(max(lcp,[],2),1,2));                           % normalized posterior probability
+post        = post ./ repmat(nansum(post,2),1,2);                           % ignore the empty classes & normalize posteriors
+predict     = NaN
+for ii = 1:length(post)
+    predict(ii)= find(max(post,[],2)==post);                                   % predicted class
+end

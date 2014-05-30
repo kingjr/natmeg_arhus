@@ -1,0 +1,55 @@
+function f = jr_distance_fit(X, y)
+% f = jr_distance_fit(X, y)
+
+% Adapted from colAUC by Jarek Tuszynski, SAIC, jaroslaw.w.tuszynski_at_saic.com
+% Code covered by BSD License
+%  * http://en.wikipedia.org/wiki/Receiver_operating_characteristic
+%  * colAUC function from caTools package in R language
+%    http://cran.r-project.org/web/packages/caTools
+
+
+
+%% Prepare for calculations & error-check
+y = y(:);
+[nr, nc] = size(X);                  % get dimentions of the data set
+[uL, ~, yy] = unique(y);             % find all the classes among the labels
+uL   = uL';
+nL   = length(uL);                   % number of unique classes
+if (nL<=1)
+    error('colAUC: List of labels ''y'' have to contain at least 2 class labels.')
+end
+if (~isnumeric(X)), error('colAUC: ''X'' must be numeric'); end
+if (nr~=length(y)), error('colAUC: length(y) and size(X,1) must be the same'); end
+per  = nchoosek(1:nL,2);             % find all possible pairs of L columns
+L        = uL(ones(nr,1),:);
+np       = size(per,1);              % how many possible pairs were found?
+
+%% Calculate AUC by integrating ROC curves
+for c=1:nc                           % for each column representing a feature
+    [b, IDX] = sort( X(:,c));          % sort all columns and store them in X. IDX stores original positions
+    nunq = find(diff(b)==0);           % find non-unique X's in column c (if vector is [1 1] nunq=1
+    nTies = length(nunq);              % number of non-unique values
+    if (nTies<nr-1)                    % make sure all numbers in X column are not the same
+        IDX = y(IDX);                    % reorder label vector in the same order as X, or associate label with each number in X
+        % assign column for each label (class) and for each point add 1 in the column corresponding to its class
+        d = ( IDX(:,ones(1,nL)) == L );
+        d = cumsum(d,1);                 % cumulative sum of columns or left node counts per class for all possible thresholds
+%         if(nTies), d(nunq, :) = []; end  % remove non unique rows (using nunq) if any
+%         d = [ zeros(1, nL); d ];         %#ok<AGROW> % append row of zeros at the beggining
+        % assume that col#1 ploted on x axis is correct clasification and col#2 (y) is false find AUC
+        for i=1:np                       % go through all permutations of columns in d
+            c1 = per(i,1);                 % and identify 2 classes to be compared
+            c2 = per(i,2);
+            n  = d(end,c1)*d(end,c2);      % normalize area to 1 at the maximum
+            if (n>0)
+                xx=d(:,c1);
+                yy=d(:,c2);
+            else, 
+                xx=[0,1];
+                yy=[0,1];
+            end
+            f(:,c,i) = glmfit(b, [xx sum(cat(2,xx,yy),2)], 'binomial', 'link', 'probit');
+        end
+    end
+end
+

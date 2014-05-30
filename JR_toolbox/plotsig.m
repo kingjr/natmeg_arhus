@@ -1,0 +1,48 @@
+function P = plotsig(x, y1, y2, alpha, color)
+% plotsig(x, y1, y2, alpha, color)
+% plots y1 and y2 as a function of x. shade between the two curve when they
+% significantly differ.
+% jeanremi.king *at* gmail.com
+% creates a vector that can be shaded between two sets of data, based on
+% its p-value from a 2t-test.
+
+if nargin == 2
+    y2 = y1;
+    y1 = x;
+else
+    xvector = x;
+end
+if nargin < 4
+    alpha = 0.05;
+end;
+if nargin < 5
+    color.tmp = [];
+end
+color.shade = getoption(color,'shade',[1 1 0.2000]);
+color.edge1 = getoption(color,'edge1','b');
+color.edge2 = getoption(color,'edge2','r');
+color.edge0 = getoption(color, 'edge0',[1 1 1]);
+color.transparency = getoption(color, 'transparency',0.9);
+
+
+% t-test 2
+[H P CT STATS] = ttest2(y1,y2, alpha);
+upper = mean(y1);
+lower = upper;
+% create vector that only differ from upper when p is significant
+[v index] = find(P<alpha);
+lower(index) = mean(y2(:,index));
+
+% plot fill vector
+filled=[upper,fliplr(lower)];
+xpoints=[xvector,fliplr(xvector)];
+fillhandle=fill(xpoints,filled,color.shade);%plot the data
+set(fillhandle,'EdgeColor',color.edge0,'FaceAlpha',color.transparency,'EdgeAlpha',0);%set edge color
+
+
+% plot normal
+hold on
+plot(xvector,mean(y1),color.edge1);
+plot(xvector,mean(y2),color.edge2);
+
+return

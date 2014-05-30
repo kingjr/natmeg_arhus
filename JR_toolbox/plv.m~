@@ -1,0 +1,101 @@
+function [output cfg phase_hilbert_data] = plv(data,cfg)
+% calculates phase locking value across trials for each pair of channels
+%--------------------------------------------------------------------------
+%-- input: 
+%     + data: n_chan x n_sample x n_trial
+%     + cfg
+%         * time              : timing of each sample                     
+%         * fsample           : sampling rate                             
+%         * filt_freqband     : frequency band of interest
+%         * [time_select]     : desired window of interest                [min max]
+%         * [cut_nb]          : number of cuts to avoid memory problem    n_chan/2
+%         * [filt_order]      : filter order                              [6 6]
+%         * [filt_type]       : filter type                               'but'
+%         * [filt_dir]        : filter direction                          'twopass'
+%         * [void]            : display feedback                          false                            
+%-- output:
+%         + output: n_chan x n_chan x n_sample (mean across trials)
+%         + cfg
+%
+%-- requires:
+%         + fieldtrip 2011 toolbox
+%         + signal processing toolbox
+%
+%--------------------------------------------------------------------------        
+% Imen El Karoui & Jean-Rémi King 2011, All right reserved (c)
+%--------------------------------------------------------------------------
+
+
+%-- parameters
+if nargin ~= 2, error('wrong number of arguments'); end
+if ~isfield(cfg,{'time', 'fsample', 'filt_freqband'}), error('missing correct cfg fields');end
+if ~isfield(cfg,'time_select'),     cfg.time_select     = [min(cfg.time) max(cfg.time)];end
+if ~isfield(cfg,'cut_nb'),          cfg.cut_nb          = size(data,1)/2;               end
+if ~isfield(cfg,'filt_order'),      cfg.filt_order      = [4 4];                       end
+if ~isfield(cfg,'filt_type'),       cfg.filt_type       = 'but';                        end
+if ~isfield(cfg,'filt_dir'),        cfg.filt_dir        = 'twopass';                    end
+if ~isfield(cfg,'void'),            cfg.void            = false;                        end
+if ~isfield(cfg,'filter_method'),   cfg.filter_method   = 'band';                       end
+    
+%--- select timing
+data                = data(:,find(cfg.time>=cfg.time_select(1),1):find(cfg.time>=cfg.time_select(2),1),:);
+[n_chan n_sample n_trial] = deal(size(data,1),size(data,2),size(data,3));
+
+%-- channel combination vector
+if cfg.void, fprintf('create combination vector'); end
+chan_index          = [];%
+for ii = 1:(n_chan-1)
+    for jj = (ii+1):n_chan
+        chan_index(:,end+1) = [ii jj];
+    end
+end
+if size(chan_index,2)/cfg.cut_nb ~= round(size(chan_index,2)/cfg.cut_nb),
+    error('cut should divide into integer number of dimensions');
+end
+chan_index          = reshape(chan_index,[2, size(chan_index,2)/cfg.cut_nb, cfg.cut_nb]); % reshape for memory issues
+
+%-- high & low pass, hilbert angle
+if cfg.void, fprintf('\ncomputes filtering, hilbert & angle\n'); end
+phase_hilbert_data = NaN(n_chan, n_sample,n_trial);
+parfor trial = 1:n_trial
+    if cfg.void, fprintf('+'); end
+    switch cfg.filter_method
+        %  /!\  hilbert is passed across wrong dimensions!
+        case 'high_low'
+            phase_hilbert_data(:,:,trial) = angle(hilbert(...
+                ft_preproc_lowpassfilter(...
+                ft_preproc_highpassfilter(...
+                squeeze(data(:,:,trial)),...
+                cfg.fsample,cfg.filt_freqband(2),cfg.filt_order(2),cfg.filt_type,cfg.filt_dir),...
+                cfg.fsample,cfg.filt_freqband(1),cfg.filt_order(1),cfg.filt_type,cfg.filt_dir)')');
+        case 'band'
+            phase_hilbert_data(:,:,trial) = angle(hilbert(...
+                ft_preproc_bandpassfilter(...
+                squeeze(data(:,:,trial)),...
+                cfg.fsample,cfg.filt_freqband,cfg.filt_order(1),cfg.filt_type,cfg.filt_dir)')');
+    end
+end
+
+%-- phase difference
+if cfg.void, fprintf('\ncomputes PLV\n'); end
+plv_mat = NaN(n_sample,size(chan_index,2),cfg.cut_nb);                      % initialize
+parfor cut = 1:cfg.cut_nb                                                      % cut vector to avoid massively big matrices
+    if cfg.void, fprintf('+'); end
+    plv_mat(:,:,cut) = abs(mean(exp(1i*(...
+        squeeze(...
+        phase_hilbert_data(chan_index(1,:,cut),:,:) ...
+        - phase_hilbert_data(chan_index(2,:,cut),:,:)))),3))';              % PLV across trials for each time sample
+end
+%
+%-- reshape for readibility
+if cfg.void, fprintf('\nreshape'); end
+plv_mat = reshape(plv_mat, size(plv_mat,1), []);
+
+output = NaN(n_chan,n_chan,n_sample);
+kk = 0;
+for ii = 1:(n_chan-1)
+    for jj = (ii+1):n_chan
+        kk = kk+1;
+        output(ii,jj,:) = plv_mat(:,kk);
+    end
+end

@@ -1,0 +1,50 @@
+function [signal_pe_dec symbols] = pe(signal,kernel,tau)
+% [signal_pe symbols] = pe(signal,kernel,tau)
+% ---------------------------------------------------------------------
+% signal should be one vector of data (in dimension 1)
+% kernel should be the size of the symbole, default = 3
+% tau defines the number of samples separating two consecutive time points
+% ---------------------------------------------------------------------
+% (c) Jean-Rémi King
+% ---------------------------------------------------------------------
+if nargin < 2,
+    kernel = 3;
+end
+if nargin <3
+    tau = 1;
+end
+%% make sure first dimension is used
+if length(size(signal)) == 1 && size(signal,1) == 1, signal = signal'; end
+%% concatenate across last+1 dimension
+s = size(signal);
+if s(end) == 1 && length(s)>1, s(end) = [];end
+dim = length(s)+1;
+dims = repmat(',:',1,dim-2);
+
+%% transform into symbol space
+builder = 'rank=cat(dim' ;
+for k = 1:kernel
+    builder= cat(2,builder,[', signal(' num2str((k-1)*tau+1) ':(end-' num2str((kernel-k)*tau) ')' dims ')']);
+end
+builder = [builder ');'];
+eval(builder);
+clear signal;
+[z order] = sort(rank,dim);
+clear rank
+
+%% change base
+symbols = sbase(order,kernel);
+
+%% identify symbols
+symbols = sbase(permute(perms(1:kernel),[1 dim 2:(dim-1)]),kernel);
+signal_pe_dec = signal_pe;
+for s = 1:length(symbols)
+    signal_pe_dec(signal_pe==symbols(s)) = s;
+end
+
+function symbols=sbase(index,kernel)
+s = size(index);
+%signal_pe = reshape(str2num(dec2base(signal,kernel)),s);
+exp = permute(repmat(kernel.^((1:kernel)-1)',[1 s(1:(end-1))]),[2:length(s) 1]);
+symbols = (index-1) .* (exp-1);
+symbols = sum(symbols,length(s)); 

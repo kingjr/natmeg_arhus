@@ -1,0 +1,75 @@
+function [B S] = plot_myregr(xdata,ydata,options)
+% plot_myregr(xdata,ydata[,options])
+% plot regression line and confidence fit to a data set.
+% options.degree            => Degree of the fit: 1
+% options.alpha             => Significance level: .05
+% options.bounds            => axis boundaries [mx Mx my My]: [0 1 0 1]
+% options.plot_data         => scatter data
+%    % options.marker_color      => 'md'
+%    % options.marker_size       => 5
+%    % options.marker_linewidth  => 1
+% options.resolution        => resolution of line plotting 0.05
+% options.fit_color         => line fit color: 'b'
+% options.ci_color          => ci fit color: same as fit color
+% options.ci_marker         => ci fit marker: '--'
+% options.plot_data
+% options.robust            => applies robust regression: false;
+% options.void              => disp: false
+%
+% JeanRémi KING (c) 2011: jeanremi.king+matlab@gmail.com
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+if nargin == 2, options.tmp = [];end
+degree          = getoption(options, 'degree', 1);		% Degree of the fit
+alpha           = getoption(options, 'alpha', 0.05);	% Significance level
+bounds          = getoption(options, 'bounds', [0 1 0 1]);	% Saxis boundaries
+marker_color    = getoption(options, 'marker_color','md');
+marker_size     = getoption(options, 'marker_size',5);
+marker_linewidth= getoption(options, 'marker_linewidth',1);
+resolution      = getoption(options, 'resolution',0.05);	% resolution of line plotting
+fit_color       = getoption(options, 'fit_color','b');
+ci_color        = getoption(options, 'ci_color',fit_color);	%
+ci_marker       = getoption(options, 'ci_marker',':');	%
+plot_data       = getoption(options, 'plot_data',false);	%
+robust          = getoption(options, 'robust',true);	%
+void            = getoption(options, 'void',true);	%
+[mx Mx my My]   = deal(bounds(1),bounds(2),bounds(3),bounds(4));
+
+% Compute the fit and return the structure used by
+% POLYCONF.
+if robust % if robust fit
+    [B2,STATS]   = ROBUSTFIT(xdata,ydata);
+    B           = B2([2 1]); % stupid matlab with its fucking inconsistencies
+    S.R         = STATS.R;
+    S.R(:,1)    = STATS.R(:,2);
+    S.R(:,2)    = STATS.R(:,1);
+    S.df        = STATS.dfe;
+    S.normr     = STATS.mad_s;
+    S.p         = STATS.p([2 1]); % stupid matlab with its fucking inconsistencies
+    %disp(B);
+    %     disp(STATS.p);
+else
+    [B,S]       = polyfit(xdata,ydata,degree);
+end
+
+
+% resolution: Scale factors for plotting.
+sx = resolution*(Mx-mx);
+sy = resolution*(My-my);
+if plot_data
+    % Plot the data, the fit, and the roots.
+%     hdata = plot(xdata,ydata,marker_color,'MarkerSize',marker_size,...
+%         'LineWidth',marker_linewidth);
+    
+    
+    xfit = linspace(mx-sx,Mx+sx,100);
+    yfit = polyval(B,xfit);
+    hfit = plot(xfit,yfit,'color', fit_color,'LineWidth',marker_linewidth);
+    hold on
+%     axis([mx-sx Mx+sx my-sy My+sy])
+    
+    % Add prediction intervals to the plot.
+    [Y,DELTA] = polyconf(B,xfit,S,'alpha',alpha);
+    plot(xfit,Y+DELTA,'--','color', ci_color);
+    plot(xfit,Y-DELTA,'--', 'color', ci_color);
+end
+return

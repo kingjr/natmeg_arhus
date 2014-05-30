@@ -1,0 +1,60 @@
+function ranksumm(X,Y)
+% compute centered ranksum test
+% e.g. in Hettmansperger 1984
+
+
+% exmaple data from Morrison (1976, p. 167) 
+
+Controls = [
+    1.21 0.61 ;
+    0.92 0.43 ;
+    0.80 0.35 ;
+    0.85 0.48 ;
+    0.98 0.42 ;
+    1.15 0.52 ;
+    1.10 0.50 ;
+    1.02 0.53 ;
+    1.18 0.45 ;
+    1.09 0.40 ;];
+Treatment = [
+    1.40 0.50;
+    1.71 0.39;
+    1.23 0.44;
+    1.19 0.37;
+    1.38 0.42;
+    1.71 0.45;
+    1.31 0.41;
+    1.30 0.47;
+    1.22 0.29;
+    1.00 0.30;
+    1.12 0.27;
+    1.09 0.35];
+
+X = Controls;
+Y = Treatment;
+
+data = [X;Y];
+% define dimensionalities
+d = size(X,2);
+n = size(X,1);
+m = size(Y,1);
+N = n+m;
+
+% for each dimension
+for ii = 1:d
+    % compute rank. Ties are assigned average rank
+    R(ii,:) = tiedrank([X(:,ii);Y(:,ii)]);
+    % compute centered rank sum statistic U
+    U(ii) = sum(R(ii,1:n)/(N+1) - 1/2);
+end
+
+U = [-1.80 1.43]
+
+% R language definition of cross product ...
+crossproduct = [R(1,:)*R(1,:)', R(1,:)*R(2,:)';R(2,:)*R(1,:)', R(2,:)*R(2,:)'];
+
+% estimate covariance matrix
+V = m*n / (N^2*(N-1)*(N+1)^2) * (crossproduct  - (N*(N+1)^2/4));
+Ustar = U*pinv(N*V)*U'
+
+p = 1-chi2cdf(Ustar,2)
